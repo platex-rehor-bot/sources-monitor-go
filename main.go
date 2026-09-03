@@ -204,6 +204,7 @@ func configureTLSTransport(caPath string) (*http.Transport, error) {
 		}
 
 		tlsConfig.RootCAs = pool
+
 		log.Printf("Loaded custom CA certificate from configured path")
 	}
 
