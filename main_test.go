@@ -20,9 +20,11 @@ func TestConfigureTLSTransport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
 		if transport == nil {
 			t.Fatal("expected non-nil transport")
 		}
+
 		if transport.TLSClientConfig.RootCAs != nil {
 			t.Error("expected nil RootCAs (system pool) when no CA path specified")
 		}
@@ -36,14 +38,18 @@ func TestConfigureTLSTransport(t *testing.T) {
 	})
 
 	t.Run("invalid PEM content returns error", func(t *testing.T) {
-		f, err := os.CreateTemp("", "test-ca-*.pem")
+		tmpDir := t.TempDir()
+
+		f, err := os.CreateTemp(tmpDir, "test-ca-*.pem")
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(f.Name())
-		if _, err := f.WriteString("not-a-valid-pem"); err != nil {
-			t.Fatal(err)
+
+		_, writeErr := f.WriteString("not-a-valid-pem")
+		if writeErr != nil {
+			t.Fatal(writeErr)
 		}
+
 		f.Close()
 
 		_, err = configureTLSTransport(f.Name())

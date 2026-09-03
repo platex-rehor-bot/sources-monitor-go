@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,10 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+// errNoCertsFound is returned when the CA certificate file contains no valid PEM certificates.
+var errNoCertsFound = errors.New("no valid certificates found")
 
 // skipEmptySourcesHeader defines the header's name that will allow the monitor to skip empty sources when fetching
 // them from the API.
@@ -63,6 +68,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to configure TLS transport: %v", err)
 		}
+
 		httpClient.Transport = transport
 	}
 
@@ -182,22 +188,26 @@ func checkAvailability(id, tenant, orgId string, skipEmptySources bool) {
 // If caPath is non-empty, the CA certificate at that path is loaded into the
 // TLS root CA pool. Otherwise, the system certificate pool is used.
 func configureTLSTransport(caPath string) (*http.Transport, error) {
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12} //nolint:exhaustruct_v5 // stdlib struct — only custom fields needed
 
 	if caPath != "" {
-		caCert, err := os.ReadFile(caPath)
+		cleanPath := filepath.Clean(caPath)
+
+		caCert, err := os.ReadFile(cleanPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading CA certificate from %s: %w", caPath, err)
+			return nil, fmt.Errorf("reading CA certificate from %s: %w", cleanPath, err)
 		}
+
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caCert) {
-			return nil, fmt.Errorf("parsing CA certificate from %s: no valid certificates found", caPath)
+			return nil, fmt.Errorf("parsing CA certificate: %w", errNoCertsFound)
 		}
+
 		tlsConfig.RootCAs = pool
-		log.Printf("Loaded custom CA certificate from %s", caPath)
+		log.Printf("Loaded custom CA certificate from configured path")
 	}
 
-	return &http.Transport{TLSClientConfig: tlsConfig}, nil
+	return &http.Transport{TLSClientConfig: tlsConfig}, nil //nolint:exhaustruct_v5 // stdlib struct
 }
 
 // availabilityStatusMatches returns true if both the source status and the target status match, which implies that the
