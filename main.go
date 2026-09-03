@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,8 +24,10 @@ const skipEmptySourcesHeader = "x-rh-sources-skip-empty-sources"
 const unavailableStatus = "unavailable"
 
 var (
+	// what scheme to connect with
+	scheme = os.Getenv("SOURCES_SCHEME")
 	// where is sources-api?
-	host = fmt.Sprintf("%v://%v:%v", os.Getenv("SOURCES_SCHEME"), os.Getenv("SOURCES_HOST"), os.Getenv("SOURCES_PORT"))
+	host = fmt.Sprintf("%v://%v:%v", scheme, os.Getenv("SOURCES_HOST"), os.Getenv("SOURCES_PORT"))
 	// how can we talk to it?
 	psk = os.Getenv("SOURCES_PSK")
 
@@ -44,9 +48,24 @@ func main() {
 	// Check whether we need to skip empty sources when fetching them or not.
 	skipEmptySources := strings.ToLower(os.Getenv("SKIP_EMPTY_SOURCES")) == "true"
 
+	// Validate scheme — warn if PSK will be sent over cleartext
+	if scheme == "http" {
+		log.Printf("WARNING: SOURCES_SCHEME is set to 'http'. The pre-shared key will be transmitted in cleartext. Set SOURCES_SCHEME=https in production environments.")
+	}
+
 	if psk == "" {
 		log.Fatalf("Need PSK to run availability checks.")
 	}
+
+	// Configure TLS transport for HTTPS connections
+	if scheme == "https" {
+		transport, err := configureTLSTransport(os.Getenv("SOURCES_TLS_CA_PATH"))
+		if err != nil {
+			log.Fatalf("Failed to configure TLS transport: %v", err)
+		}
+		httpClient.Transport = transport
+	}
+
 	log.Printf("[host: %s][status: %s][skip_empty_sources: %t] Checking sources", host, *status, skipEmptySources)
 
 	// a count of how many requests we do
@@ -157,6 +176,28 @@ func checkAvailability(id, tenant, orgId string, skipEmptySources bool) {
 	<-choke
 	// remove one from the waitgroup, since this routine is terminating.
 	wg.Done()
+}
+
+// configureTLSTransport creates an http.Transport with TLS configuration.
+// If caPath is non-empty, the CA certificate at that path is loaded into the
+// TLS root CA pool. Otherwise, the system certificate pool is used.
+func configureTLSTransport(caPath string) (*http.Transport, error) {
+	tlsConfig := &tls.Config{}
+
+	if caPath != "" {
+		caCert, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading CA certificate from %s: %w", caPath, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("parsing CA certificate from %s: no valid certificates found", caPath)
+		}
+		tlsConfig.RootCAs = pool
+		log.Printf("Loaded custom CA certificate from %s", caPath)
+	}
+
+	return &http.Transport{TLSClientConfig: tlsConfig}, nil
 }
 
 // availabilityStatusMatches returns true if both the source status and the target status match, which implies that the

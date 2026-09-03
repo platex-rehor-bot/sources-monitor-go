@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // The following statuses are not part of the main file, so they need to be declared here. They will be used to test
 // the output of the "availabilityStatusMatches" function.
@@ -9,6 +12,46 @@ const (
 	inProgressStatus         = "in_progress"
 	partiallyAvailableStatus = "partially_available"
 )
+
+// TestConfigureTLSTransport tests the TLS transport configuration function.
+func TestConfigureTLSTransport(t *testing.T) {
+	t.Run("empty CA path uses system certificate pool", func(t *testing.T) {
+		transport, err := configureTLSTransport("")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if transport == nil {
+			t.Fatal("expected non-nil transport")
+		}
+		if transport.TLSClientConfig.RootCAs != nil {
+			t.Error("expected nil RootCAs (system pool) when no CA path specified")
+		}
+	})
+
+	t.Run("nonexistent CA path returns error", func(t *testing.T) {
+		_, err := configureTLSTransport("/nonexistent/ca.crt")
+		if err == nil {
+			t.Error("expected error for nonexistent CA path")
+		}
+	})
+
+	t.Run("invalid PEM content returns error", func(t *testing.T) {
+		f, err := os.CreateTemp("", "test-ca-*.pem")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(f.Name())
+		if _, err := f.WriteString("not-a-valid-pem"); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+
+		_, err = configureTLSTransport(f.Name())
+		if err == nil {
+			t.Error("expected error for invalid PEM content")
+		}
+	})
+}
 
 // TestAvailabilityStatusMatches tests if the function under test returns "true" only when the source status matches
 // the target status. It also tests that a "true" is returned when the target status is "unavailable" and the source's

@@ -39,6 +39,8 @@ objects:
               name: internal-psk
               key: psk
               optional: true
+        - name: SOURCES_TLS_CA_PATH
+          value: ${SOURCES_TLS_CA_PATH}
         resources:
           limits:
             cpu: ${CPU_LIMIT}
@@ -75,6 +77,8 @@ objects:
               name: internal-psk
               key: psk
               optional: true
+        - name: SOURCES_TLS_CA_PATH
+          value: ${SOURCES_TLS_CA_PATH}
         resources:
           limits:
             cpu: ${CPU_LIMIT}
@@ -116,7 +120,7 @@ parameters:
 - description: Scheme to use for the Sources service URL.
   displayName: Sources Service Scheme
   name: SOURCES_SCHEME
-  value: http
+  value: https
 - description: Host to use for the Sources service URL.
   displayName: Sources Service Host
   name: SOURCES_HOST
@@ -126,3 +130,6 @@ parameters:
   displayName: Sources Service Port
   name: SOURCES_PORT
   value: '8000'
+- description: Optional path to a CA certificate bundle for TLS connections to the Sources service.
+  displayName: Sources TLS CA Certificate Path
+  name: SOURCES_TLS_CA_PATH
